@@ -1,0 +1,113 @@
+
+#### Solution
+
+I chose to add in the size of the school as a covariate. It makes sense to "center" the school and create a "school size ratio", of which we will take the logarithm (base 2). This means the slope can be interpreted as the change in mean math score for every doubling of the 
+school size.
+
+This answers the question of *whether school size has an effect on math scores.*
+
+Our school-level covariates are in `data2`. We construct our centered school size covariate called `size`...
+
+```{r}
+size = log2(data2$size) - mean(log2(data2$size))
+```
+
+...and then include it in the object we will pass to JAGS:
+
+```{r}
+## Create the data to pass to JAGS
+forJags <- list()
+forJags$math <- data1$math
+forJags$j <- match(data1$school,     ## indexes which school we're in
+                   unique(data1$school))
+forJags$J <- max(forJags$j)          ## number of schools
+forJags$size <- size
+```
+
+The BUGS file is shown below.
+```
+```{r echo=FALSE, results = 'asis'}
+cat(paste(readLines("../../solution_bug/oneway3.bug"),collapse = "\n"))
+```
+```
+
+We now have all the information we need to fit the model. Note that we need to include the new parameter `beta.size` in the initialization object.
+
+```{r}
+## initialize the Gibbs sampler with starting values
+## this is not necessary most of the time.
+inits <- list(mu0 = mean(forJags$math),
+              alpha = tapply(forJags$math,
+                forJags$j,mean),     ## school-specific means
+              beta.size = 0)
+```
+
+We compile and sample from the model.
+
+```{r eval = FALSE}
+## compile JAGS model
+compiled.model <- jags.model(file="solution_bug/oneway3.bug",
+                  inits=inits,
+                  data=forJags)
+```
+
+```{r echo=FALSE}
+## compile JAGS model
+compiled.model <- jags.model(file="../../solution_bug/oneway3.bug",
+                  inits=inits,
+                  data=forJags, quiet = TRUE)
+```
+
+Note that we now include `beta.size` as a parameter to monitor.
+
+```{r results = 'hide'}
+## get 4k iterations
+samples <- coda.samples(compiled.model, 4000,
+                    variable.names=c("alpha","mu0",
+                      "sigma.eps","sigma.alpha","beta.size"))
+```
+
+We can now plot the posterior distribution for the `beta.size` parameter...
+
+```{r}
+summary(samples[[1]][,"beta.size"])
+```
+
+...and plot the marginal posterior:
+
+```{r}
+plot(samples[[1]][,"beta.size"])
+```
+
+
+Recall that we estimated the observed school means in part 1, so we can use this to check our answer. We will plot the observed means against the school size variable, and then add a regression line based on the Bayesian estimates.
+
+```{r}
+plot(size, observed.means$math, ylab = "Math score", xlab = "(Centered) log size", pch = 19, col = rgb(0,0,0,.3))
+
+## Compute the Bayesian point estimates
+intercept = mean(samples[[1]][,"mu0"])
+slope = mean(samples[[1]][,"beta.size"])
+
+## classical (non-hierarchical) regression line in red
+abline(lm(observed.means$math~size), col = "red", lwd=2, lty=2)
+
+## Bayesian regression line in blue
+abline(intercept, slope, col = "blue", lwd=2, lty=1)
+
+```
+
+The results agree. The difference between the two is that the hierarchical model can estimate "proper" standard errors, accounting for uncertainty at all levels (student and school) whereas the classical estimates are based on aggregation across students, and hence cannot take into account the uncertainty at that level.
+
+```{r}
+## Posterior standard deviation of the intercept
+sd(samples[[1]][,"mu0"])
+
+## Posterior standard deviation of beta
+sd(samples[[1]][,"beta.size"])
+
+## Classical (non-hierarchical) regression 
+summary(lm(observed.means$math~size))
+```
+
+Though, to be fair, the results are nearly identical in this particular case owing to the moderately-high, and roughly equal, number of observations in each school. 

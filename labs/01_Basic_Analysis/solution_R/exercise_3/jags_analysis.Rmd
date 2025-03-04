@@ -1,0 +1,91 @@
+#### Solution: JAGS analysis
+
+```{r echo = TRUE}
+# compiled.model <- jags.model(file="regression3.bug",
+#                   data=forJags,
+#                   inits=inits)
+# Define the NIMBLE model
+code <- nimbleCode({
+	for(i in 1:N){   ## regression model for y
+	      mu[i] <- beta[1] + beta[2]*x[i] + beta[3]*x[i]*x[i]
+	      y[i] ~ dnorm(mu[i],tau)
+	}
+	## priors
+	beta[1] ~ dnorm(0,.0001)   ## intercept
+	beta[2] ~ dnorm(0,.0001)   ## slope
+	beta[3] ~ dnorm(0,.0001)   ## quadratic
+	sigma ~ dunif(0,100)       ## residual std dev
+	tau <- pow(sigma,-2)       ## convert to precision
+
+})
+```
+
+```{r echo=FALSE, eval = TRUE}
+# compiled.model <- jags.model(file="../../solution_bug/regression3.bug",
+#                   data=forJags,
+#                   inits=inits, quiet = TRUE)
+# Define the model
+model <- nimbleModel(code, data = data, inits = inits,constants = list(N=length(data$y)))
+
+# Compile the model
+Cmodel <- compileNimble(model)
+
+# Configure the MCMC
+conf <- configureMCMC(model)
+conf$addMonitors(c("beta", "sigma", "y[22]"))
+```
+
+```{r results = 'hide'}
+# samples <- coda.samples(model=compiled.model,
+#                     variable.names=c("beta","sigma","y[22]"),
+#                     n.iter=50000)
+# Build the MCMC
+Rmcmc <- buildMCMC(conf)
+
+# Compile the MCMC
+Cmcmc <- compileNimble(Rmcmc, project = model)
+
+# Run the MCMC
+samples <- runMCMC(Cmcmc, niter = 50000)
+```
+
+```{r}
+summary(samples)
+```
+
+```{r fig.width=7, fig.height=14}
+plot(samples[, 'beta[1]'])
+plot(density(samples[, 'beta[1]']))
+plot(samples[, 'beta[2]'])
+plot(density(samples[, 'beta[2]']))
+plot(samples[, 'beta[3]'])
+plot(density(samples[, 'beta[3]']))
+plot(samples[, 'sigma'])
+plot(density(samples[, 'sigma']))
+```
+
+
+```{r}
+xsqr <- x^2
+linReg <- lm(y2~x + xsqr)
+summary(linReg)
+```
+
+```{r fig.width=8, fig.height=6}
+## This code plots the fitted values with the quadratic term
+ord <- order(x)
+fitted <- c(linReg$fitted.values,NA)
+plot(x,y2)
+lines(x[ord],fitted[ord],col="red")
+abline(lm(y2~x),col="blue")
+```
+
+
+
+```{r fig.width=6, fig.height=5}
+ymissing = samples[, 'y[22]']
+# plot kernel density estimate
+plot(density(ymissing), lwd=2, main = "Posterior prediction for y*")
+# add vertical line
+abline(v = y[22], col="red", lty=2, lwd=2)
+```

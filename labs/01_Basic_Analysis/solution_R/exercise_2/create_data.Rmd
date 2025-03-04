@@ -1,0 +1,20 @@
+#### Solution: Creating the data
+
+```{r message=FALSE, warning=FALSE}
+## Load packages
+library(nimble)
+library(pscl)
+
+
+## Read data
+data(absentee)
+attach(absentee) 
+
+## create data
+y <- (absdem - absrep)/(absdem + absrep)*100
+x <- (machdem - machrep)/(machdem + machrep)*100
+y2 <- y
+y2[22] <- NA
+```
+
+

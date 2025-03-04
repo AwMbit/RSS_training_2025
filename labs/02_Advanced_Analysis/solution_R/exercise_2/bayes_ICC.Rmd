@@ -1,0 +1,81 @@
+
+#### Solution
+
+We first compute the two variances we need to compute the Bayesian ICC. Remember that we have two parameters that represent standard deviations, so we can use these to compute the variances.
+
+```{r}
+## Bayesian ICC
+sigma2.eps = samples[[1]][,'sigma.eps']^2  
+sigma2.alpha = samples[[1]][,'sigma.alpha']^2
+```
+
+Remember that `sigma2.eps` and `sigma2.alpha` are both vectors of values; they are MCMC chains.
+
+We can use the formula for the ICC to compute a new vector (MCMC chain) of values that represent posterior samples of the ICC.
+
+```{r}
+## Create a chain for the Bayesian estimate of the ICC
+bayes.icc = sigma2.alpha / (sigma2.alpha + sigma2.eps)
+
+## Convert the vector to an mcmc object for convenience
+bayes.icc = mcmc(bayes.icc)
+```
+
+Now that we have a vector of values, it is easy to compute posterior quantities of interest.
+
+```{r}
+summary(bayes.icc)
+```
+
+We can also plot the posterior of the Bayesian ICC and add the classical ICC for comparison.
+
+```{r tidy = FALSE}
+## Plot the posterior
+hist(bayes.icc, col="lightgray", 
+     border = "darkgray", freq = FALSE,
+     xlab = "Bayesian ICC")
+
+## Add the classical value to the plot, in green
+abline(v = multilevel::ICC1(classical), col = "darkgreen", lwd=2)
+text(multilevel::ICC1(classical), par()$usr[3], 
+     "Classical ICC", adj = c(-.2,1.2), srt=90, 
+     col = "darkgreen", cex = .8)
+```
+
+Notice how easy it was to obtain a credible interval for the Bayesian ICC. For many quantities, it will be quite difficult to obtain a classical confidence interval, yet a Bayesian credible interval will be easily obtainable from the MCMC chain.
+
+#### Another perspective
+
+Another (complementary) way we can view the problem is to look at the estimates of the $\alpha$ parameters.
+
+Recall that `alphas` contains our chains for the alpha parameters and `alpha.est` contains the posterior means. We now compute the 95% credible intervals for each $\alpha$.
+
+```{r}
+## Use apply() to compute central 95% credible intervals
+CIs = apply(alphas, 2, function(v) quantile(v, p = c(.025, .975)))
+
+```
+
+We want to plot these estimates and CIs in a way that will enable us to visualize variance of the schools. A cumulative distribution plot, with error bars, is one good way of doing this.
+
+```{r tidy = FALSE}
+## We need to reorder the estimates and CIs together, so we define a
+## variable to keep track of the ordering
+ord = order(alpha.est)
+
+## Plot the school means, in order from worst to best (using ord)
+plot(alpha.est[ord], 1:length(alpha.est), 
+     xlim = range(CIs),
+     pch = 19, ylab = "School (ordered)", 
+     xlab = "Hierarchical school mean")
+
+## Add the corresponding credible intervals
+segments(CIs[1,ord], 1:length(alpha.est), 
+         CIs[2,ord], 1:length(alpha.est),
+         col = rgb(0,0,0,.2))
+
+```
+
+As can be seen, the variability of the schools is substantial compared to the credible intervals. 
+
+

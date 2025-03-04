@@ -1,0 +1,17 @@
+.Rproj.user
+.Ruserdata
+.Rhistory
+.Rdata
+.httr-oauth
+.DS_Store
+*.tar.gz
+*.so
+*.o
+*.csv
+*.dll
+*.xlsx
+*.xls
+*.RDS
+inst/doc
+/doc/
+/Meta/

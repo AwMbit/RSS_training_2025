@@ -1,0 +1,30 @@
+
+#### Solution
+
+We first gather the observed means and the point estimates of the $\alpha$ parameters, the hierarchical means of the schools.
+
+```{r}
+
+## Use aggregate to compute the observed mean math score per school
+observed.means = aggregate(math ~ school, data = data1, mean)
+
+## Compute the posterior means of the alpha parameters
+## to use as point estimates
+alphas = samples[[1]][,1:160]
+alpha.est = colMeans(alphas)
+
+```
+
+We can now plot the two estimates against one another.
+
+```{r tidy = FALSE}
+plot(observed.means$math, alpha.est, 
+     ylab = "Hierarchical estimate", 
+     xlab = "Observed school mean", 
+     col = rgb(0,0,0,.3), pch = 19)
+abline(0,1, lty = 2, col="red")
+
+```
+
+Notice the moderate hierarchical shrinkage.
+

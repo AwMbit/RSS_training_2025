@@ -1,0 +1,326 @@
+---
+title: "Bayesian Statistics: A practical introduction"
+subtitle: Lab 1
+author: "Richard D. Morey, Cardiff University (<a href='mailto:richarddmorey@gmail.com'>richarddmorey@gmail.com</a>)"
+framework: bootstrap
+mode: selfcontained
+highlighter: prettify
+hitheme: twitter-bootstrap
+output:
+  html_document:
+    toc: true
+    toc_float: false
+assets:
+  css:
+    - "http://fonts.googleapis.com/css?family=Raleway:300"
+    - "http://fonts.googleapis.com/css?family=Oxygen"
+---
+
+
+<style>
+body{
+  font-family: 'Oxygen', sans-serif;
+  font-size: 16px;
+  line-height: 24px;
+}
+
+h1,h2,h3,h4 {
+  font-family: 'Raleway', sans-serif;
+}
+
+.container { width: 1000px; }
+h3 {
+  background-color: #D4DAEC;
+  text-indent: 50px; 
+}
+h4 {
+  text-indent: 100px;
+}
+
+g-table-intro h4 {
+  text-indent: 0px;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+table {
+  text-align: left;
+  line-height: 40px;
+  border-collapse: separate;
+  border-spacing: 0;
+  border: 2px solid #ed1c40;
+  width: 500px;
+  margin: 50px auto;
+  border-radius: .25rem;
+}
+
+thead tr:first-child {
+  background: #ed1c40;
+  color: #fff;
+  border: none;
+}
+
+th:first-child,
+td:first-child {
+  padding: 0 15px 0 20px;
+}
+
+thead tr:last-child th {
+  border-bottom: 3px solid #ddd;
+}
+
+tbody tr:hover {
+  background-color: rgba(237, 28, 64, .1);
+  cursor: default;
+}
+
+tbody tr:last-child td {
+  border: none;
+}
+
+tbody td {
+  border-bottom: 1px solid #ddd;
+}
+
+td:last-child {
+  text-align: left;
+  padding-right: 10px;
+}
+
+</style>
+
+
+Each example contains R code for you to run by cutting and pasting the code from the document into R. The output should look similar to the output in the document below.
+
+Before you start, you should change your R working directory to whatever directory you have stored the lab files in. This can be done through the `File...` menu in Windows, or in all platforms using the `setwd()` function. 
+
+Regression 
+------------------------------
+
+
+### Fully-worked example
+
+This example was taken from Jackman's "Bayesian Analysis for the Social Sciences", section 6.3. Most of the code is by Simon Jackman. 
+
+
+> In Nov. 1993, Pennsylvania held legislative election. In the 2nd district, the Democratic candidate lost to the Republican candidate by a count of the machine-cast votes, 19,127 to 19,691. Among hand-counted absentee ballots, the Democrat won 1,396 to 371. The Republican sued, saying the absentee count was fraudulent. See the plot below to see the anomolous district (in red).
+
+
+We first load Jackman's pscl library, which contains the data. If the `library()` command fails, uncomment the `install.packages()` line by removing the # symbol and run it first. 
+```{r message=FALSE, warning=FALSE}
+# install.packages('pscl')
+library(nimble)
+library(pscl)
+data(absentee)
+attach(absentee) 
+```
+`attach()` makes it so that we can refer to the columns of the `absentee` data frame without explicitly saying `absentee` every time.
+
+The next two lines of code create the data that we will be dealing with; the percent advantage, in favor of the Democrats, for both absentee (abs) and machine counted (mach) ballots.
+```{r}
+y <- (absdem - absrep)/(absdem + absrep)*100
+x <- (machdem - machrep)/(machdem + machrep)*100
+```
+The machine-counted vote percentage will be our predictor, and will predict the absentee ballot vote.
+
+We can plot the data in R:
+```{r fig.width=6, fig.height=5, tidy = FALSE}
+plot(y~x, xlab = "Democratic margin, machine-counted (%)",
+     ylab="Democratic margin, absentee (%)")
+points(x[22],y[22],pch=21,bg="red",cex=1.2)
+
+# plot least squares line while eliminating 
+# the 22, anomolous, point
+abline(lm(y[1:21]~x[1:21]))
+```
+
+
+We need to create a list, which in R is a sort of 'grouping' of variables, that we will pass to JAGS. It must contain all the necessary information for the analysis.
+```{r}
+# ## environment for passing to JAGS
+# forJags <- list(y=y[1:21],
+#                 x=x[1:21],
+#                 xstar=x[22])
+ data_nimble <- list(y=y[1:21],
+                 x=x[1:21],
+                 xstar=x[22])
+
+```
+For each member of the list, the left-hand side is the name as JAGS will see it, and the right-hand side is what we are calling the data in R. Notice that we are eliminating the 22nd data point, which is the strange one. We pass the strange $x$ value as `xstar`.
+
+We now create another list, containing settings for JAGS. Almost all of the time (including here) this is unncessary, because JAGS will guess the starting values and use good default settings; this is for demonstration.
+```{r}
+# ## initial values, list containing one list, one chain
+# inits <- list(list(beta=c(0,0),
+#                    sigma=5,
+#                    ystar=0,
+#                    .RNG.seed=1234,   ## seed the RNG explicitly
+#                    .RNG.name="base::Mersenne-Twister"))
+
+## initial values, list containing one list, one chain
+inits <- list(beta=c(0,0),
+                   sigma=5,
+                   ystar=0)#,
+                #   .RNG.seed=1234,   ## seed the RNG explicitly
+                 #  .RNG.name="base::Mersenne-Twister"))
+
+```
+
+
+We now 'compile' the model by telling JAGS to combine the data (in `forJags`), the setup (in `inits`), and the model definition (in the file `regression.bug`).
+```{r results = 'hide'}
+# compiled.model <- jags.model(file="regression.bug",
+#                              data=forJags,
+#                              inits=inits)
+
+
+code <- nimbleCode({
+	for(i in 1:N){   ## regression model for y
+	      mu[i] <- beta[1] + beta[2]*x[i]
+	      y[i] ~ dnorm(mu[i],tau)
+	}
+	## priors
+	beta[1] ~ dnorm(0,.0001)   ## intercept
+	beta[2] ~ dnorm(0,.0001)   ## slope
+	sigma ~ dunif(0,100)       ## residual std dev
+	tau <- pow(sigma,-2)       ## convert to precision
+
+	## out of sample predicton for suspect case
+	mustar <- beta[1] + beta[2]*xstar
+	## posterior predictive density for y[22] given 
+	## historical data obs 1 - 21 and x[22]
+	ystar ~ dnorm(mustar,tau)  
+  
+  })
+```
+
+The contents of regression.bug is simply text describing the model. (Do not run this code in R; it is BUGS code, not R code.)
+
+```
+```{r echo=FALSE, results = 'asis'}
+cat(paste(readLines('regression.bug'),collapse="\n"))
+```
+```
+
+The first 10 lines are the simple linear regression model; `mu` is the predicted value, and `y` is the observed value, with error. `beta[1]` and `beta[2]` are the slope and intercept, respectively. Their priors are normal with very low precision (high variance). The error standard deviation, `sigma`, as a very broad uniform prior placed on it. `tau` is the transformation from standard deviation (`sigma`) into precision (the reciprocal of the variance, which JAGS uses). 
+
+Lines after line 11 are the code for the out-of-sample prediction. `mustar` is the predicted value for the anomolous point based on the mahine counted votes; `ystar` is a sample from its posterior predictive distribution - where we would predict the absentee ballot count to be, accounting for the uncertainty in all variables.
+
+Having compiled the JAGS model, we can now sample from the joint posterior distribution. `compiled.model` is what we called our compiled model. `variable.names` tells JAGS which variables we are interested in. JAGS will only report back values of variables we ask it to report back using the `variable.names` argument. `n.iter` is the number of Gibbs sampler iterations to run.
+```{r results = 'hide'}
+# samples <- coda.samples(model=compiled.model,
+#                     variable.names=c("beta","sigma","ystar"),
+#                     n.iter=50000)
+# Define the model
+model <- nimbleModel(code, data = data_nimble, inits = inits,constants = list(N=length(data_nimble$y)))
+
+# Compile the model
+Cmodel <- compileNimble(model)
+
+# Configure the MCMC
+conf <- configureMCMC(model)
+conf$addMonitors(c("beta", "sigma", "ystar"))
+# Build the MCMC
+Rmcmc <- buildMCMC(conf)
+
+# Compile the MCMC
+Cmcmc <- compileNimble(Rmcmc, project = model)
+
+# Run the MCMC
+samples <- runMCMC(Cmcmc, niter = 50000)
+
+```
+The more iterations, the better the results, but the longer it takes. The variable `samples` now contains our analysis.
+
+We can get summaries of the variables:
+```{r}
+summary(samples)
+```
+We can compare these values to the classical estimates:
+```{r}
+linreg <- lm(y[1:21] ~ x[1:21])
+summary(linreg)
+```
+
+
+The first element in `samples` is a data frame containing all of our samples. We can plot the MCMC chains:
+
+```{r fig.width=7, fig.height=14}
+plot(samples[, 'beta[1]'])
+plot(density(samples[, 'beta[1]']))
+plot(samples[, 'beta[2]'])
+plot(density(samples[, 'beta[2]']))
+plot(samples[, 'sigma'])
+plot(density(samples[, 'sigma']))
+```
+
+The plots in the left column are time-series plots of the MCMC chains; the plots on the left are kernel-density (smoothed histogram) estimates of the posterior densities.
+
+We are particularly interested in the posterior predictive distribution for y[22], which is contained in column 4 of the MCMC output in `samples[[1]]`. We can plot this separately:
+
+```{r fig.width=6, fig.height=5}
+ystar = samples[,"ystar"]
+# plot kernel density estimate
+plot(density(ystar), lwd=2, main = "Posterior prediction for y*")
+# add vertical line
+abline(v = y[22], col="red", lty=2, lwd=2)
+```
+
+The red vertical line is the observed value. As can be clearly seen, the value is quite outside the range we would expect on the basis of the other points.
+
+We can also estimate the posterior predictive probability that y[22] would be greater than the observed value.
+```{r}
+mean(ystar>y[22])
+```
+
+There appears to be evidence that the district in question is anomolous.
+
+### Extending the example: missing data
+
+In this exercise, we will accomplish the same thing as above, except from a different perspective: eliminating `y[22]` and treating it as missing. To do this, you'll need to modifying the BUGS file and change the R code. The easiest way to change the R code is to copy it all into an R script window for editing.
+
+Steps:
+
+1. Copy the file `regression.bug` to a new file, `regression2.bug`.
+2. Edit the code in `regression2.bug` to remove all code having to do with the out-of-sample prediction (after line 11). Make sure you don't accidentally remove the last `}`.
+3. After the lines defining `x` and `y` in the R code, add the following lines of R code: `y2 <- y` and `y2[22] <- NA`.
+What we're doing is making `y2[22]` into missing data.
+4. Remove all references to `ystar` and `xstar` in the code you ran above. 
+5. In `forJags`, correct `x=x[1:21]` to `x=x` (because we're going to use all 22 values in `x`) and `y=y[1:21]` to `y=y2`.
+6. Remove `ystar` from the `variable.names`, and add `y[22]`. 
+7. Change your code to refer to `regression2.bug` instead of `regression.bug`.
+8. Run all the (newly edited) code, up to and including plotting the posterior densities in `samples[[1]]`.
+
+What will happen is that JAGS will see that `y[22]` is missing, and will sample from its posterior distribution! In this way, the Bayesian model correctly accounts for incertainty given the missing data. Plot the posterior of `y[22]`. Do you get the same result as we did previously (you should).
+
+
+
+```{r child='solution_R/exercise_2/create_data.Rmd'}
+```
+
+```{r child='solution_R/exercise_2/jags_setup.Rmd'}
+```
+
+```{r child='solution_R/exercise_2/jags_analysis.Rmd'}
+```
+
+### Modifying the model: adding a quadratic term
+
+1. Copy the file `regression2.bug` to a new file, `regression3.bug`.
+2. Add a quadratic term to the model in `regression3.bug` (still excluding `y[22]`), modifying the BUGS and R code so that you can estimate the parameters. The new coefficient for the quadratic term should be `beta[3]`.
+3. Perform the traditional analysis with the `lm()` function (see above) adding a quadratic term. Compare the classical regression result with the Bayesian posterior.
+4. What do you conclude about the anomolous `y[22]`? Is it still anomolous? Why or why not?
+
+
+```{r child='solution_R/exercise_2/create_data.Rmd'}
+```
+
+```{r child='solution_R/exercise_3/jags_setup.Rmd'}
+```
+
+```{r child='solution_R/exercise_3/jags_analysis.Rmd'}
+```

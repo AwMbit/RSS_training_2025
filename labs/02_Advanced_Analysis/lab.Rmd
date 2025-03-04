@@ -1,0 +1,302 @@
+---
+title: "Bayesian Statistics: A practical introduction"
+subtitle: Lab 2
+author: "Richard D. Morey, Cardiff University (<a href='mailto:richarddmorey@gmail.com'>richarddmorey@gmail.com</a>)"
+framework: bootstrap
+mode: selfcontained
+highlighter: prettify
+hitheme: twitter-bootstrap
+output:
+  html_document:
+    toc: true
+    toc_float: false
+assets:
+  css:
+    - "http://fonts.googleapis.com/css?family=Raleway:300"
+    - "http://fonts.googleapis.com/css?family=Oxygen"
+always_allow_html: true
+---
+
+
+<style>
+body{
+  font-family: 'Oxygen', sans-serif;
+  font-size: 16px;
+  line-height: 24px;
+}
+
+h1,h2,h3,h4 {
+  font-family: 'Raleway', sans-serif;
+}
+
+.container { width: 1000px; }
+h3 {
+  background-color: #D4DAEC;
+  text-indent: 50px; 
+}
+h4 {
+  text-indent: 100px;
+}
+
+g-table-intro h4 {
+  text-indent: 0px;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+table {
+  text-align: left;
+  line-height: 40px;
+  border-collapse: separate;
+  border-spacing: 0;
+  border: 2px solid #ed1c40;
+  width: 500px;
+  margin: 50px auto;
+  border-radius: .25rem;
+}
+
+thead tr:first-child {
+  background: #ed1c40;
+  color: #fff;
+  border: none;
+}
+
+th:first-child,
+td:first-child {
+  padding: 0 15px 0 20px;
+}
+
+thead tr:last-child th {
+  border-bottom: 3px solid #ddd;
+}
+
+tbody tr:hover {
+  background-color: rgba(237, 28, 64, .1);
+  cursor: default;
+}
+
+tbody tr:last-child td {
+  border: none;
+}
+
+tbody td {
+  border-bottom: 1px solid #ddd;
+}
+
+td:last-child {
+  text-align: left;
+  padding-right: 10px;
+}
+
+</style>
+
+
+Each example contains R code for you to run by cutting and pasting the code from the document into R. The output should look similar to the output in the document below.
+
+Before you start, you should change your R working directory to whatever directory you have stored this lab file in. This can be done through the `File...` menu in Windows, or in all platforms using the `setwd()` function. 
+
+Hierarchical modeling
+-----------------
+
+### Setup
+See Jackman (2009) offers the following Example 7.6 (page 323).
+
+> ANOVA. The 1982 High School and Beyond Survey is a nationally representative
+sample of US public and Catholic schools, covering 7185 students in 160 schools. The
+chief outcome of interest is a standardized measure of math ability, with a mean of
+12.75 and IQR of [7.28, 18.32]. These data figure prominently in the standard reference
+on hierarchical linear models (Raudenbush and Bryk 2002), and so are well suited for
+our purposes here.
+> We fit a one-way ANOVA model (Equation 7.1 in Example 7.1), recognizing that
+students are grouped by school. We momentarily ignore school type (public vs Catholic)
+and other school-level characteristics...
+
+The code to run the analysis is in `oneWay.R`. Remember to change R's working directory, and to load the `rjags` library. See the BUGS code on `oneWay2.bug`, and make sure you understand the model.
+
+### Data preparation
+
+First we prepare packages and read in the data.
+
+```{r}
+library(multilevel)
+library(rjags)
+
+# Read in the data using the code in the dataPrep.R
+source('dataPrep.R')
+```
+
+We can now examine the structure of the data. Each row is a student.
+
+```{r echo=TRUE}
+DT::datatable(data1, options = list(pageLength = 5))
+```
+
+We also have access to school level covariates in the data frame `data2`.
+
+Math scores go from 0 to 25, as we can see by looking at a summary of the scores in the `math` column.
+
+```{r}
+
+## Summarise the column of interest
+summary(data1$math)
+
+```
+
+
+Now we can look at the counts of the students and schools in the data set.
+
+```{r}
+
+## How many students in each school are there?
+table(data1$school)
+
+
+## How many schools?
+length(unique(data1$school))
+
+```
+
+To see if it will be important to include school as a covariate, we compute the intra-class correlation to see if `school` adds a substantial amount of variance. In this case, the ICC is an estimate of
+\[
+\frac{\sigma^2_{\mbox{school}}}{\sigma^2_{\mbox{school}} + \sigma^2_\epsilon}
+\]
+The ICC measures the relative contribution of the random schools and random error to the variance in the data.
+
+
+```{r}
+## First, perform a classical one-way ANOVA
+classical <- aov(math ~ as.factor(school),
+                 data = data1)
+summary(classical)
+
+## intra-class correlation
+multilevel::ICC1(classical)
+
+```
+
+It seems that the intraclass correlation coefficient is moderately high. We should include school in our model.
+
+
+
+### Part 1: Fitting the hierarchical model
+
+We will fit the hierarchical model built in `oneWay2.bug`, listed below:
+
+```
+```{r echo=FALSE, results='asis'}
+cat(paste(readLines('oneway2.bug'), collapse = "\n"))
+```
+```
+
+What are the variables?
+
+Variable name | Type       | Length | Description
+--------------|------------|--------|--------------
+`math`        | data       |  Number of students      | the math score of the `i`th student
+`alpha`       | parameter  |  Number of schools | the effect of being in `p`th school 
+`j`           | index      |  Number of students  | an index telling us which school the `i`th student attends
+`tau.eps`     | parameter  |  1 | Precision (inverse of variance) of math scores within schools
+`J`           | data       | 1  | Total number of schools
+`mu0`         | parameter  | 1  | Grand mean math performance of across schools
+`tau.alpha`      | parameter | 1 | Precision of mean math scores across schools
+`sigma.eps`    | parameter | 1 | Standard deviation of math scores within schools
+`sigma.alpha` | parameter | 1 | Standard deviation of mean math scores across schools
+
+
+
+
+
+```{r results = 'hide'}
+## Create the data to pass to JAGS
+forJags <- list()
+forJags$math <- data1$math
+forJags$j <- match(data1$school,     ## indexes which school we're in
+                   unique(data1$school))
+forJags$J <- max(forJags$j)          ## number of schools
+
+## initialize the Gibbs sampler with starting values
+## this is not necessary most of the time.
+inits <- list(mu0=mean(forJags$math),
+              alpha=tapply(forJags$math,
+                forJags$j,mean)     ## school-specific means
+              )
+
+## compile JAGS model
+compiled.model <- jags.model(file="oneway2.bug",
+                  inits=inits,
+                  data=forJags)
+
+## get 4k iterations
+samples <- coda.samples(compiled.model, 4000,
+                    variable.names=c("alpha","mu0",
+                      "sigma.eps","sigma.alpha"))
+```
+
+Let's first check one of our convergence statistics. 
+
+```{r eval = FALSE}
+## Geweke diagnostic
+gd = geweke.diag(samples)
+
+## Extract the z scores from the object
+geweke.z.scores = gd[[1]]$z
+
+## plot the cumulative distribution of the z scores
+plot(ecdf(geweke.z.scores), xlab = "Geweke diagnostic z score")
+
+## Add the theoretical line (standard normal)
+curve( pnorm(x), xlim = par()$usr[1:2], add = TRUE, lwd = 2, col="red")
+```
+
+We now make a PDF file containing plots of all the chains. We make a PDF because it is easier to page through a PDF than a lot of R plots.
+
+```{r eval = FALSE}
+## see summaries for all of the output
+summary(samples)
+
+## Dump a PDF with all chains
+pdf('chains.pdf', version = "1.4")
+plot(samples[[1]])
+dev.off()
+```
+
+
+Compare the hierarchical estimates of the school means with the nonhierarchical school means (use `aggregate()` or `tapply()` to find the group means). What do you expect to see? Is this what you find?
+
+```{r child='solution_R/exercise_1/compare_hier.Rmd', include = solutions, eval = solutions}
+```
+
+
+### Part 2: Assessing the variance in schools
+
+Compute a Bayesian posterior for the intraclass correlation coefficient using the values from the MCMC chain. 
+
+1. Use reparametrization to compute the two variances of interest.
+2. Compute a chain of ICC values using the definition of the ICC above. 
+3. Compute the posterior mean and 95% credible interval.
+4. Plot the posterior.
+
+Does the Bayesian ICC agree with the classical ICC?
+
+```{r child='solution_R/exercise_2/bayes_ICC.Rmd', include = solutions, eval = solutions}
+```
+
+### Part 3: Adding a school-level covariate
+
+Choose a school-level covariate to add to the model. The school-level covariates are contained in the data frame `data2`, which has the following structure. Each row is a school.
+
+
+```{r echo=FALSE}
+DT::datatable(data2, options = list(pageLength = 5))
+```
+
+(The solution uses school size.)
+
+```{r child='solution_R/exercise_3/school_size.Rmd', include = solutions, eval = solutions}
+```
+
+
