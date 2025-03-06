@@ -123,8 +123,8 @@ First we prepare packages and read in the data.
 
 ```{r}
 library(multilevel)
-library(rjags)
-
+#library(rjags)
+library(nimble)
 # Read in the data using the code in the dataPrep.R
 source('dataPrep.R')
 ```
@@ -216,7 +216,7 @@ forJags <- list()
 forJags$math <- data1$math
 forJags$j <- match(data1$school,     ## indexes which school we're in
                    unique(data1$school))
-forJags$J <- max(forJags$j)          ## number of schools
+#forJags$J <- max(forJags$j)          ## number of schools
 
 ## initialize the Gibbs sampler with starting values
 ## this is not necessary most of the time.
@@ -225,15 +225,78 @@ inits <- list(mu0=mean(forJags$math),
                 forJags$j,mean)     ## school-specific means
               )
 
-## compile JAGS model
-compiled.model <- jags.model(file="oneway2.bug",
-                  inits=inits,
-                  data=forJags)
+# ## compile JAGS model
+# compiled.model <- jags.model(file="oneway2.bug",
+#                   inits=inits,
+#                   data=forJags)
+# 
+# 
+# ## get 4k iterations
+# samples <- coda.samples(compiled.model, 4000,
+#                     variable.names=c("alpha","mu0",
+#                       "sigma.eps","sigma.alpha"))
+# 
 
-## get 4k iterations
-samples <- coda.samples(compiled.model, 4000,
-                    variable.names=c("alpha","mu0",
-                      "sigma.eps","sigma.alpha"))
+# Define the NIMBLE model
+code <- nimbleCode({
+
+	## loop over the student-level data
+	for(i in 1:N){
+	      ## j is a variable (nested indexing)
+	      math[i] ~ dnorm(alpha[j[i]], tau.eps)
+	}
+	
+	## loop over the J schools (level 2)
+	for(p in 1:J){
+	      alpha[p] ~ dnorm(mu0, tau.alpha)
+	}
+	
+	## priors on hyperparameters
+	mu0 ~ dnorm(0, .0001)
+
+	## uniform priors on standard deviations
+	sigma.eps ~ dunif(0, 10)
+  sigma.alpha ~ dunif(0, 10)
+
+	## convert the standard deviations to precisions	 
+	tau.eps <- pow(sigma.eps, -2)
+	tau.alpha <- pow(sigma.alpha, -2)
+
+
+
+})
+
+
+
+# compiled.model <- jags.model(file="../../solution_bug/regression2.bug",
+#                   data=forJags,
+#                   inits=inits, quiet = TRUE)
+# Define the model
+model <- nimbleModel(code, data = forJags, #inits = inits,
+constants = list(N=length(forJags$math),J= max(forJags$j)))
+
+# Compile the model
+Cmodel <- compileNimble(model)
+
+# Configure the MCMC
+conf <- configureMCMC(model)
+conf$addMonitors(c("alpha","mu0",                   "sigma.eps","sigma.alpha"))
+
+
+# Build the MCMC
+Rmcmc <- buildMCMC(conf)
+
+# Compile the MCMC
+Cmcmc <- compileNimble(Rmcmc, project = model)
+
+# Run the MCMC
+samples <- runMCMC(Cmcmc, niter = 50000)
+# samples <- coda.samples(model=compiled.model,
+#                     variable.names=c("beta","sigma","y[22]"),
+#                     n.iter=50000)
+
+
+summary(samples)
 ```
 
 Let's first check one of our convergence statistics. 
