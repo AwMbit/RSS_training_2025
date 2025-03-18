@@ -1,0 +1,68 @@
+#### Solution: Nimble analysis
+
+```{r echo = TRUE, eval = FALSE}
+nimble.model <- nimble::readBUGSmodel(
+  model="regression2.bug",
+  data=forNimble,
+  inits=inits)
+
+```
+
+```{r echo=FALSE, eval = TRUE}
+nimble.model <- nimble::readBUGSmodel(
+  model="../../solution_bug/regression3.bug",
+  data=forNimble,
+  inits=inits)
+```
+
+```{r}
+compiled.model = compileNimble(nimble.model)
+
+conf <- configureMCMC(nimble.model)
+conf$addMonitors(c("beta", "sigma", "y"))
+
+# Build the MCMC
+Rmcmc <- buildMCMC(conf)
+Cmcmc <- compileNimble(Rmcmc, project = compiled.model)
+```
+```{r results = 'hide'}
+samples <- runMCMC(Cmcmc, niter = 50000)
+```
+
+```{r}
+samples[,c(1:4,26)] |>
+  coda::as.mcmc() |>
+  summary()
+```
+
+```{r fig.width=7, fig.height=14}
+samples[,c(1:4,26)] |>
+  coda::as.mcmc() |>
+  plot()
+```
+
+
+```{r}
+xsqr <- x^2
+linReg <- lm(y2~x + xsqr)
+summary(linReg)
+```
+
+```{r fig.width=8, fig.height=6}
+## This code plots the fitted values with the quadratic term
+ord <- order(x)
+fitted <- c(linReg$fitted.values,NA)
+plot(x,y2)
+lines(x[ord],fitted[ord],col="red")
+abline(lm(y2~x),col="blue")
+```
+
+
+
+```{r fig.width=6, fig.height=5}
+ymissing = samples[, 'y[22]']
+# plot kernel density estimate
+plot(density(ymissing), lwd=2, main = "Posterior prediction for y*")
+# add vertical line
+abline(v = y[22], col="red", lty=2, lwd=2)
+```

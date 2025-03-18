@@ -1,6 +1,6 @@
 model{
 	## loop over the student-level data
-	for(i in 1:length(math)){
+	for(i in 1:Nstudents){
 	      ## j is a variable (nested indexing)
 	      math[i] ~ dnorm(alpha[j[i]], tau.eps)
 	}

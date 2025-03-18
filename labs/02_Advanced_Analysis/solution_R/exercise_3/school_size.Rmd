@@ -12,16 +12,17 @@ Our school-level covariates are in `data2`. We construct our centered school siz
 size = log2(data2$size) - mean(log2(data2$size))
 ```
 
-...and then include it in the object we will pass to JAGS:
+...and then include it in the object we will pass to `nimble`:
 
 ```{r}
-## Create the data to pass to JAGS
-forJags <- list()
-forJags$math <- data1$math
-forJags$j <- match(data1$school,     ## indexes which school we're in
+## Create the data to pass to nimble
+forNimble <- list()
+forNimble$math <- data1$math
+forNimble$Nstudents = length(data1$math)
+forNimble$j <- match(data1$school,     ## indexes which school we're in
                    unique(data1$school))
-forJags$J <- max(forJags$j)          ## number of schools
-forJags$size <- size
+forNimble$J <- max(forNimble$j)          ## number of schools
+forNimble$size <- size
 ```
 
 The BUGS file is shown below.
@@ -36,108 +37,60 @@ We now have all the information we need to fit the model. Note that we need to i
 ```{r}
 ## initialize the Gibbs sampler with starting values
 ## this is not necessary most of the time.
-inits <- list(mu0 = mean(forJags$math),
-              alpha = tapply(forJags$math,
-                forJags$j,mean),     ## school-specific means
+inits <- list(mu0 = mean(forNimble$math),
+              alpha = tapply(forNimble$math,
+                forNimble$j,mean),     ## school-specific means
               beta.size = 0)
 ```
 
 We compile and sample from the model.
 
-```{r }
-## compile JAGS model
-# compiled.model <- jags.model(file="solution_bug/oneway3.bug",
-#                   inits=inits,
-#                   data=forJags)
-
-
-	code <- nimbleCode({
-	## loop over the student-level data
-	for(i in 1:N){
-	      ## j is a variable (nested indexing)
-	      math[i] ~ dnorm(alpha[j[i]], tau.eps)
-	}
-	
-	## loop over the J schools (level 2)
-	for(p in 1:J){
-	      alpha.pred[p] <- mu0 + beta.size * size[p]
-	      alpha[p] ~ dnorm(alpha.pred[p] , tau.alpha)
-	}
-	
-	## priors on hyperparameters
-	mu0 ~ dnorm(0, .0001)
-	beta.size ~ dnorm(0, .0001)
-
-	## uniform priors on standard deviations
-	sigma.eps ~ dunif(0, 10)
-	sigma.alpha ~ dunif(0, 10)
-
-	## convert the standard deviations to precisions	 
-	tau.eps <- pow(sigma.eps, -2)
-	tau.alpha <- pow(sigma.alpha, -2)
-
-})
-
-
-
-# compiled.model <- jags.model(file="../../solution_bug/regression2.bug",
-#                   data=forJags,
-#                   inits=inits, quiet = TRUE)
-# Define the model
-model <- nimbleModel(code, data = forJags, #inits = inits,
-constants = list(N=length(forJags$math),J= max(forJags$j)))
-
-# Compile the model
-Cmodel <- compileNimble(model)
-
-# Configure the MCMC
-conf <- configureMCMC(model)
-conf$addMonitors(c("alpha","mu0",
-                      "sigma.eps","sigma.alpha","beta.size"))
-
-
-# Build the MCMC
-Rmcmc <- buildMCMC(conf)
-
-# Compile the MCMC
-Cmcmc <- compileNimble(Rmcmc, project = model)
-
-# Run the MCMC
-samples <- runMCMC(Cmcmc, niter = 5000)
-# samples <- coda.samples(model=compiled.model,
-#                     variable.names=c("beta","sigma","y[22]"),
-#                     n.iter=50000)
-
-
-summary(samples)
+```{r eval = FALSE}
+## compile Nimble model
+nimble.model <- nimble::readBUGSmodel(
+  model="solution_bug/oneway3.bug",
+  data=forNimble,
+  inits=inits)
 ```
 
 ```{r echo=FALSE}
-## compile JAGS model
-# compiled.model <- jags.model(file="../../solution_bug/oneway3.bug",
-#                   inits=inits,
-#                   data=forJags, quiet = TRUE)
+## compile Nimble model
+nimble.model <- nimble::readBUGSmodel(
+  model="../../solution_bug/oneway3.bug",
+  data=forNimble,
+  inits=inits)
 ```
 
-Note that we now include `beta.size` as a parameter to monitor.
 
 ```{r results = 'hide'}
-# ## get 4k iterations
-# samples <- coda.samples(compiled.model, 4000,
-#                     variable.names=c("alpha","mu0",
-#                       "sigma.eps","sigma.alpha","beta.size"))
+## get 4k iterations
+compiled.model = compileNimble(nimble.model)
+
+conf <- configureMCMC(nimble.model)
+conf$addMonitors(c("mu0", "sigma.alpha", "sigma.eps", "alpha", "beta.size"))
+
+# Build the MCMC
+Rmcmc <- buildMCMC(conf)
+Cmcmc <- compileNimble(Rmcmc, project = compiled.model)
+
+runMCMC(Cmcmc, niter = 4000) |>
+  as.mcmc() -> samples 
+
 ```
+
+
+Note that we now include `beta.size` as a parameter to monitor.
 
 We can now plot the posterior distribution for the `beta.size` parameter...
 
 ```{r}
-summary(samples[[1]][,"beta.size"])
+summary(samples[,"beta.size"])
 ```
 
 ...and plot the marginal posterior:
 
 ```{r}
-plot(samples[[1]][,"beta.size"])
+plot(samples[,"beta.size"])
 ```
 
 
@@ -147,8 +100,8 @@ Recall that we estimated the observed school means in part 1, so we can use this
 plot(size, observed.means$math, ylab = "Math score", xlab = "(Centered) log size", pch = 19, col = rgb(0,0,0,.3))
 
 ## Compute the Bayesian point estimates
-intercept = mean(samples[[1]][,"mu0"])
-slope = mean(samples[[1]][,"beta.size"])
+intercept = mean(samples[,"mu0"])
+slope = mean(samples[,"beta.size"])
 
 ## classical (non-hierarchical) regression line in red
 abline(lm(observed.means$math~size), col = "red", lwd=2, lty=2)
@@ -162,10 +115,10 @@ The results agree. The difference between the two is that the hierarchical model
 
 ```{r}
 ## Posterior standard deviation of the intercept
-sd(samples[[1]][,"mu0"])
+sd(samples[,"mu0"])
 
 ## Posterior standard deviation of beta
-sd(samples[[1]][,"beta.size"])
+sd(samples[,"beta.size"])
 
 ## Classical (non-hierarchical) regression 
 summary(lm(observed.means$math~size))

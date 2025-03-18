@@ -5,8 +5,8 @@ We first compute the two variances we need to compute the Bayesian ICC. Remember
 
 ```{r}
 ## Bayesian ICC
-sigma2.eps = samples[[1]][,'sigma.eps']^2  
-sigma2.alpha = samples[[1]][,'sigma.alpha']^2
+sigma2.eps = samples[,'sigma.eps']^2  
+sigma2.alpha = samples[,'sigma.alpha']^2
 ```
 
 Remember that `sigma2.eps` and `sigma2.alpha` are both vectors of values; they are MCMC chains.

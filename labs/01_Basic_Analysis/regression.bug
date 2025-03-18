@@ -1,5 +1,5 @@
 model{
-	for(i in 1:length(y)){   ## regression model for y
+	for(i in 1:N){   ## regression model for y
 	      mu[i] <- beta[1] + beta[2]*x[i]
 	      y[i] ~ dnorm(mu[i],tau)
 	}

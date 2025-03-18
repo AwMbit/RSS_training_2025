@@ -14,6 +14,8 @@ assets:
   css:
     - "http://fonts.googleapis.com/css?family=Raleway:300"
     - "http://fonts.googleapis.com/css?family=Oxygen"
+editor_options: 
+  chunk_output_type: console
 ---
 
 
@@ -114,6 +116,7 @@ We first load Jackman's pscl library, which contains the data. If the `library()
 ```{r message=FALSE, warning=FALSE}
 # install.packages('pscl')
 library(nimble)
+library(mcmc)
 library(pscl)
 data(absentee)
 attach(absentee) 
@@ -139,63 +142,42 @@ abline(lm(y[1:21]~x[1:21]))
 ```
 
 
-We need to create a list, which in R is a sort of 'grouping' of variables, that we will pass to JAGS. It must contain all the necessary information for the analysis.
+We need to create a list, which in R is a sort of 'grouping' of variables, that we will pass to Nimble. It must contain all the necessary information for the analysis.
 ```{r}
-# ## environment for passing to JAGS
-# forJags <- list(y=y[1:21],
-#                 x=x[1:21],
-#                 xstar=x[22])
- data_nimble <- list(y=y[1:21],
-                 x=x[1:21],
-                 xstar=x[22])
-
+## environment for passing to Nimble
+forNimble <- list(y=y[1:21],
+                N = 21,
+                x=x[1:21],
+                xstar=x[22])
 ```
-For each member of the list, the left-hand side is the name as JAGS will see it, and the right-hand side is what we are calling the data in R. Notice that we are eliminating the 22nd data point, which is the strange one. We pass the strange $x$ value as `xstar`.
+For each member of the list, the left-hand side is the name as Nimble will see it, and the right-hand side is what we are calling the data in R. Notice that we are eliminating the 22nd data point, which is the strange one. We pass the strange $x$ value as `xstar`.
 
-We now create another list, containing settings for JAGS. Almost all of the time (including here) this is unncessary, because JAGS will guess the starting values and use good default settings; this is for demonstration.
+We now create another list, containing settings for Nimble. Almost all of the time (including here) this is unncessary, because Nimble will guess the starting values and use good default settings; this is for demonstration.
 ```{r}
-# ## initial values, list containing one list, one chain
-# inits <- list(list(beta=c(0,0),
-#                    sigma=5,
-#                    ystar=0,
-#                    .RNG.seed=1234,   ## seed the RNG explicitly
-#                    .RNG.name="base::Mersenne-Twister"))
-
-## initial values, list containing one list, one chain
+## initial values in a list
 inits <- list(beta=c(0,0),
                    sigma=5,
-                   ystar=0)#,
-                #   .RNG.seed=1234,   ## seed the RNG explicitly
-                 #  .RNG.name="base::Mersenne-Twister"))
+                   ystar=0)
 
 ```
 
 
-We now 'compile' the model by telling JAGS to combine the data (in `forJags`), the setup (in `inits`), and the model definition (in the file `regression.bug`).
+We now 'compile' the model by telling Nimble to combine the data (in `forNimble`), the setup (in `inits`), and the model definition (in the file `regression.bug`).
+
 ```{r results = 'hide'}
-# compiled.model <- jags.model(file="regression.bug",
-#                              data=forJags,
-#                              inits=inits)
+nimble.model <- nimble::readBUGSmodel(
+  model="regression.bug",
+  data=forNimble,
+  inits=inits)
 
+compiled.model = compileNimble(nimble.model)
 
-code <- nimbleCode({
-	for(i in 1:N){   ## regression model for y
-	      mu[i] <- beta[1] + beta[2]*x[i]
-	      y[i] ~ dnorm(mu[i],tau)
-	}
-	## priors
-	beta[1] ~ dnorm(0,.0001)   ## intercept
-	beta[2] ~ dnorm(0,.0001)   ## slope
-	sigma ~ dunif(0,100)       ## residual std dev
-	tau <- pow(sigma,-2)       ## convert to precision
+conf <- configureMCMC(nimble.model)
+conf$addMonitors(c("beta", "sigma", "ystar"))
 
-	## out of sample predicton for suspect case
-	mustar <- beta[1] + beta[2]*xstar
-	## posterior predictive density for y[22] given 
-	## historical data obs 1 - 21 and x[22]
-	ystar ~ dnorm(mustar,tau)  
-  
-  })
+# Build the MCMC
+Rmcmc <- buildMCMC(conf)
+Cmcmc <- compileNimble(Rmcmc, project = compiled.model)
 ```
 
 The contents of regression.bug is simply text describing the model. (Do not run this code in R; it is BUGS code, not R code.)
@@ -206,39 +188,21 @@ cat(paste(readLines('regression.bug'),collapse="\n"))
 ```
 ```
 
-The first 10 lines are the simple linear regression model; `mu` is the predicted value, and `y` is the observed value, with error. `beta[1]` and `beta[2]` are the slope and intercept, respectively. Their priors are normal with very low precision (high variance). The error standard deviation, `sigma`, as a very broad uniform prior placed on it. `tau` is the transformation from standard deviation (`sigma`) into precision (the reciprocal of the variance, which JAGS uses). 
+The first 10 lines are the simple linear regression model; `mu` is the predicted value, and `y` is the observed value, with error. `beta[1]` and `beta[2]` are the slope and intercept, respectively. Their priors are normal with very low precision (high variance). The error standard deviation, `sigma`, as a very broad uniform prior placed on it. `tau` is the transformation from standard deviation (`sigma`) into precision (the reciprocal of the variance, which Nimble uses). 
 
 Lines after line 11 are the code for the out-of-sample prediction. `mustar` is the predicted value for the anomolous point based on the mahine counted votes; `ystar` is a sample from its posterior predictive distribution - where we would predict the absentee ballot count to be, accounting for the uncertainty in all variables.
 
-Having compiled the JAGS model, we can now sample from the joint posterior distribution. `compiled.model` is what we called our compiled model. `variable.names` tells JAGS which variables we are interested in. JAGS will only report back values of variables we ask it to report back using the `variable.names` argument. `n.iter` is the number of Gibbs sampler iterations to run.
+Having compiled the Nimble model, we can now sample from the joint posterior distribution. `Cmcmc` is what we called our compiled model. `conf$addMonitors()` above tells Nimble which variables we are interested in. Nimble will only report back values of these variables. `niter` is the number of Gibbs sampler iterations to run.
 ```{r results = 'hide'}
-# samples <- coda.samples(model=compiled.model,
-#                     variable.names=c("beta","sigma","ystar"),
-#                     n.iter=50000)
-# Define the model
-model <- nimbleModel(code, data = data_nimble, inits = inits,constants = list(N=length(data_nimble$y)))
-
-# Compile the model
-Cmodel <- compileNimble(model)
-
-# Configure the MCMC
-conf <- configureMCMC(model)
-conf$addMonitors(c("beta", "sigma", "ystar"))
-# Build the MCMC
-Rmcmc <- buildMCMC(conf)
-
-# Compile the MCMC
-Cmcmc <- compileNimble(Rmcmc, project = model)
-
-# Run the MCMC
 samples <- runMCMC(Cmcmc, niter = 50000)
-
 ```
 The more iterations, the better the results, but the longer it takes. The variable `samples` now contains our analysis.
 
 We can get summaries of the variables:
 ```{r}
-summary(samples)
+samples |>
+  coda::as.mcmc() |>
+  summary()
 ```
 We can compare these values to the classical estimates:
 ```{r}
@@ -250,20 +214,17 @@ summary(linreg)
 The first element in `samples` is a data frame containing all of our samples. We can plot the MCMC chains:
 
 ```{r fig.width=7, fig.height=14}
-plot(samples[, 'beta[1]'])
-plot(density(samples[, 'beta[1]']))
-plot(samples[, 'beta[2]'])
-plot(density(samples[, 'beta[2]']))
-plot(samples[, 'sigma'])
-plot(density(samples[, 'sigma']))
+samples |>
+  coda::as.mcmc() |>
+  plot()
 ```
 
 The plots in the left column are time-series plots of the MCMC chains; the plots on the left are kernel-density (smoothed histogram) estimates of the posterior densities.
 
-We are particularly interested in the posterior predictive distribution for y[22], which is contained in column 4 of the MCMC output in `samples[[1]]`. We can plot this separately:
+We are particularly interested in the posterior predictive distribution for y[22], which is contained in column 4 of the MCMC output in `samples`. We can plot this separately:
 
 ```{r fig.width=6, fig.height=5}
-ystar = samples[,"ystar"]
+ystar = samples[,4]
 # plot kernel density estimate
 plot(density(ystar), lwd=2, main = "Posterior prediction for y*")
 # add vertical line
@@ -290,22 +251,22 @@ Steps:
 3. After the lines defining `x` and `y` in the R code, add the following lines of R code: `y2 <- y` and `y2[22] <- NA`.
 What we're doing is making `y2[22]` into missing data.
 4. Remove all references to `ystar` and `xstar` in the code you ran above. 
-5. In `forJags`, correct `x=x[1:21]` to `x=x` (because we're going to use all 22 values in `x`) and `y=y[1:21]` to `y=y2`.
-6. Remove `ystar` from the `variable.names`, and add `y[22]`. 
+5. In `forNimble`, correct `x=x[1:21]` to `x=x` (because we're going to use all 22 values in `x`) and `y=y[1:21]` to `y=y2`.
+6. Remove `ystar` from the `conf$addMonitors()`, and add `y[22]`. 
 7. Change your code to refer to `regression2.bug` instead of `regression.bug`.
-8. Run all the (newly edited) code, up to and including plotting the posterior densities in `samples[[1]]`.
+8. Run all the (newly edited) code, up to and including plotting the posterior densities in `samples`.
 
-What will happen is that JAGS will see that `y[22]` is missing, and will sample from its posterior distribution! In this way, the Bayesian model correctly accounts for incertainty given the missing data. Plot the posterior of `y[22]`. Do you get the same result as we did previously (you should).
+What will happen is that Nimble will see that `y[22]` is missing, and will sample from its posterior distribution! In this way, the Bayesian model correctly accounts for incertainty given the missing data. Plot the posterior of `y[22]`. Do you get the same result as we did previously (you should).
 
 
 
-```{r child='solution_R/exercise_2/create_data.Rmd'}
+```{r child='solution_R/exercise_2/create_data.Rmd', include = solutions, eval = solutions}
 ```
 
-```{r child='solution_R/exercise_2/jags_setup.Rmd'}
+```{r child='solution_R/exercise_2/nimble_setup.Rmd', include = solutions, eval = solutions}
 ```
 
-```{r child='solution_R/exercise_2/jags_analysis.Rmd'}
+```{r child='solution_R/exercise_2/nimble_analysis.Rmd', include = solutions, eval = solutions}
 ```
 
 ### Modifying the model: adding a quadratic term
@@ -316,11 +277,11 @@ What will happen is that JAGS will see that `y[22]` is missing, and will sample 
 4. What do you conclude about the anomolous `y[22]`? Is it still anomolous? Why or why not?
 
 
-```{r child='solution_R/exercise_2/create_data.Rmd'}
+```{r child='solution_R/exercise_2/create_data.Rmd', include = solutions, eval = solutions}
 ```
 
-```{r child='solution_R/exercise_3/jags_setup.Rmd'}
+```{r child='solution_R/exercise_3/nimble_setup.Rmd', include = solutions, eval = solutions}
 ```
 
-```{r child='solution_R/exercise_3/jags_analysis.Rmd'}
+```{r child='solution_R/exercise_3/nimble_analysis.Rmd', include = solutions, eval = solutions}
 ```

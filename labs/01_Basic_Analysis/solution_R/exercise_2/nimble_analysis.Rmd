@@ -1,0 +1,51 @@
+#### Solution: nimble analysis
+
+
+
+```{r echo = TRUE, eval = FALSE}
+nimble.model <- nimble::readBUGSmodel(
+  model="regression2.bug",
+  data=forNimble,
+  inits=inits)
+```
+
+```{r echo = FALSE, eval = TRUE}
+nimble.model <- nimble::readBUGSmodel(
+  model="../../solution_bug/regression2.bug",
+  data=forNimble,
+  inits=inits)
+```
+
+```{r}
+compiled.model = compileNimble(nimble.model)
+
+conf <- configureMCMC(nimble.model)
+conf$addMonitors(c("beta", "sigma", "y"))
+
+# Build the MCMC
+Rmcmc <- buildMCMC(conf)
+Cmcmc <- compileNimble(Rmcmc, project = compiled.model)
+```
+```{r results = 'hide'}
+samples <- runMCMC(Cmcmc, niter = 50000)
+```
+
+```{r}
+samples[,c(1:3,25)] |>
+  coda::as.mcmc() |>
+  summary()
+```
+
+```{r fig.width=7, fig.height=14}
+samples[,c(1:3,25)] |>
+  coda::as.mcmc() |>
+  plot()
+```
+
+```{r fig.width=6, fig.height=5}
+ymissing = samples[, 'y[22]']
+# plot kernel density estimate
+plot(density(ymissing), lwd=2, main = "Posterior prediction for y*")
+# add vertical line
+abline(v = y[22], col="red", lty=2, lwd=2)
+```

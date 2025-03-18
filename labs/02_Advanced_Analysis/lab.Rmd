@@ -15,6 +15,8 @@ assets:
     - "http://fonts.googleapis.com/css?family=Raleway:300"
     - "http://fonts.googleapis.com/css?family=Oxygen"
 always_allow_html: true
+editor_options: 
+  chunk_output_type: console
 ---
 
 
@@ -115,7 +117,7 @@ our purposes here.
 students are grouped by school. We momentarily ignore school type (public vs Catholic)
 and other school-level characteristics...
 
-The code to run the analysis is in `oneWay.R`. Remember to change R's working directory, and to load the `rjags` library. See the BUGS code on `oneWay2.bug`, and make sure you understand the model.
+The code to run the analysis is in `oneWay.R`. Remember to change R's working directory, and to load the `nimble` library. See the BUGS code on `oneWay2.bug`, and make sure you understand the model.
 
 ### Data preparation
 
@@ -123,8 +125,9 @@ First we prepare packages and read in the data.
 
 ```{r}
 library(multilevel)
-#library(rjags)
 library(nimble)
+library(mcmc)
+
 # Read in the data using the code in the dataPrep.R
 source('dataPrep.R')
 ```
@@ -197,6 +200,7 @@ What are the variables?
 Variable name | Type       | Length | Description
 --------------|------------|--------|--------------
 `math`        | data       |  Number of students      | the math score of the `i`th student
+`Nstudents`       | data  |  1 | Total number of students
 `alpha`       | parameter  |  Number of schools | the effect of being in `p`th school 
 `j`           | index      |  Number of students  | an index telling us which school the `i`th student attends
 `tau.eps`     | parameter  |  1 | Precision (inverse of variance) of math scores within schools
@@ -211,92 +215,39 @@ Variable name | Type       | Length | Description
 
 
 ```{r results = 'hide'}
-## Create the data to pass to JAGS
-forJags <- list()
-forJags$math <- data1$math
-forJags$j <- match(data1$school,     ## indexes which school we're in
+## Create the data to pass to Nimble
+forNimble <- list()
+forNimble$math <- data1$math
+forNimble$Nstudents = length(data1$math)
+forNimble$j <- match(data1$school,     ## indexes which school we're in
                    unique(data1$school))
-#forJags$J <- max(forJags$j)          ## number of schools
+forNimble$J <- max(forNimble$j)          ## number of schools
 
 ## initialize the Gibbs sampler with starting values
 ## this is not necessary most of the time.
-inits <- list(mu0=mean(forJags$math),
-              alpha=tapply(forJags$math,
-                forJags$j,mean)     ## school-specific means
+inits <- list(mu0=mean(forNimble$math),
+              alpha=tapply(forNimble$math,
+                forNimble$j,mean)     ## school-specific means
               )
 
-# ## compile JAGS model
-# compiled.model <- jags.model(file="oneway2.bug",
-#                   inits=inits,
-#                   data=forJags)
-# 
-# 
-# ## get 4k iterations
-# samples <- coda.samples(compiled.model, 4000,
-#                     variable.names=c("alpha","mu0",
-#                       "sigma.eps","sigma.alpha"))
-# 
+nimble.model <- nimble::readBUGSmodel(
+  model="oneway2.bug",
+  data=forNimble,
+  inits=inits)
 
-# Define the NIMBLE model
-code <- nimbleCode({
+## get 4k iterations
+compiled.model = compileNimble(nimble.model)
 
-	## loop over the student-level data
-	for(i in 1:N){
-	      ## j is a variable (nested indexing)
-	      math[i] ~ dnorm(alpha[j[i]], tau.eps)
-	}
-	
-	## loop over the J schools (level 2)
-	for(p in 1:J){
-	      alpha[p] ~ dnorm(mu0, tau.alpha)
-	}
-	
-	## priors on hyperparameters
-	mu0 ~ dnorm(0, .0001)
-
-	## uniform priors on standard deviations
-	sigma.eps ~ dunif(0, 10)
-  sigma.alpha ~ dunif(0, 10)
-
-	## convert the standard deviations to precisions	 
-	tau.eps <- pow(sigma.eps, -2)
-	tau.alpha <- pow(sigma.alpha, -2)
-
-
-
-})
-
-
-
-# compiled.model <- jags.model(file="../../solution_bug/regression2.bug",
-#                   data=forJags,
-#                   inits=inits, quiet = TRUE)
-# Define the model
-model <- nimbleModel(code, data = forJags, #inits = inits,
-constants = list(N=length(forJags$math),J= max(forJags$j)))
-
-# Compile the model
-Cmodel <- compileNimble(model)
-
-# Configure the MCMC
-conf <- configureMCMC(model)
-conf$addMonitors(c("alpha","mu0",                   "sigma.eps","sigma.alpha"))
-
+conf <- configureMCMC(nimble.model)
+conf$addMonitors(c("mu0", "sigma.alpha", "sigma.eps", "alpha"))
 
 # Build the MCMC
 Rmcmc <- buildMCMC(conf)
+Cmcmc <- compileNimble(Rmcmc, project = compiled.model)
 
-# Compile the MCMC
-Cmcmc <- compileNimble(Rmcmc, project = model)
+runMCMC(Cmcmc, niter = 4000) |>
+  as.mcmc() -> samples 
 
-# Run the MCMC
-samples <- runMCMC(Cmcmc, niter = 50000)
-# samples <- coda.samples(model=compiled.model,
-#                     variable.names=c("beta","sigma","y[22]"),
-#                     n.iter=50000)
-
-
-summary(samples)
 ```
 
 Let's first check one of our convergence statistics. 
@@ -306,7 +257,7 @@ Let's first check one of our convergence statistics.
 gd = geweke.diag(samples)
 
 ## Extract the z scores from the object
-geweke.z.scores = gd[[1]]$z
+geweke.z.scores = gd$z
 
 ## plot the cumulative distribution of the z scores
 plot(ecdf(geweke.z.scores), xlab = "Geweke diagnostic z score")
@@ -323,7 +274,7 @@ summary(samples)
 
 ## Dump a PDF with all chains
 pdf('chains.pdf', version = "1.4")
-plot(samples[[1]])
+plot(samples)
 dev.off()
 ```
 

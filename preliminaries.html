@@ -9,9 +9,10 @@
 <meta http-equiv="X-UA-Compatible" content="IE=EDGE" />
 
 
+<meta name="author" content="Richard D. Morey, Cardiff University (richarddmorey@gmail.com)" />
 
 
-<title>create_data.knit</title>
+<title>Bayesian Statistics: A practical introduction</title>
 
 <script>// Pandoc 2.9 adds attributes on both header and div. We remove the former (to
 // be compatible with the behavior of Pandoc < 2.8).
@@ -348,26 +349,292 @@ display: none;
 
 
 
+<h1 class="title toc-ignore">Bayesian Statistics: A practical
+introduction</h1>
+<h4 class="author">Richard D. Morey, Cardiff University
+(<a href="mailto:richarddmorey@gmail.com">richarddmorey@gmail.com</a>)</h4>
 
 </div>
 
+<div id="TOC">
+<ul>
+<li><a href="#downloading-the-workshop-material" id="toc-downloading-the-workshop-material">Downloading the workshop
+material</a></li>
+<li><a href="#installing-necessary-software" id="toc-installing-necessary-software">Installing necessary software</a>
+<ul>
+<li><a href="#obtaining-the-software" id="toc-obtaining-the-software">Obtaining the software</a></li>
+<li><a href="#installing-r-packages" id="toc-installing-r-packages">Installing R packages</a></li>
+</ul></li>
+<li><a href="#learning-about-r" id="toc-learning-about-r">Learning about
+R</a></li>
+<li><a href="#schedule" id="toc-schedule">Schedule</a>
+<ul>
+<li><a href="#day-1" id="toc-day-1">Day 1</a></li>
+<li><a href="#day-2" id="toc-day-2">Day 2</a></li>
+</ul></li>
+</ul>
+</div>
 
-<div id="solution-creating-the-data" class="section level4">
-<h4>Solution: Creating the data</h4>
-<pre class="r"><code>## Load packages
-library(nimble)
-library(pscl)
-
-
-## Read data
-data(absentee)
-attach(absentee) 
-
-## create data
-y &lt;- (absdem - absrep)/(absdem + absrep)*100
-x &lt;- (machdem - machrep)/(machdem + machrep)*100
-y2 &lt;- y
-y2[22] &lt;- NA</code></pre>
+<style>
+body{
+font-family: 'Oxygen', sans-serif;
+font-size: 16px;
+line-height: 24px;
+}
+h1,h2,h3,h4 {
+font-family: 'Raleway', sans-serif;
+}
+.container { width: 1000px; }
+h3 {
+background-color: #D4DAEC;
+text-indent: 50px; }
+h4 {
+text-indent: 100px;
+}
+g-table-intro h4 {
+text-indent: 0px;
+}
+* {
+margin: 0;
+padding: 0;
+box-sizing: border-box;
+}
+table {
+text-align: left;
+line-height: 40px;
+border-collapse: separate;
+border-spacing: 0;
+border: 2px solid #ed1c40;
+width: 500px;
+margin: 50px auto;
+border-radius: .25rem;
+}
+thead tr:first-child {
+background: #ed1c40;
+color: #fff;
+border: none;
+}
+th:first-child,
+td:first-child {
+padding: 0 15px 0 20px;
+}
+thead tr:last-child th {
+border-bottom: 3px solid #ddd;
+}
+tbody tr:hover {
+background-color: rgba(237, 28, 64, .1);
+cursor: default;
+}
+tbody tr:last-child td {
+border: none;
+}
+tbody td {
+border-bottom: 1px solid #ddd;
+}
+td:last-child {
+text-align: left;
+padding-right: 10px;
+}
+</style>
+<div id="downloading-the-workshop-material" class="section level2">
+<h2>Downloading the workshop material</h2>
+<p>A file containing all workshop materials is available for download at
+<a href="https://cardiffunipsychstats.co.uk/RSS2025/ONS_workshop/workshop.zip">https://cardiffunipsychstats.co.uk/RSS2025/ONS_workshop/workshop.zip</a>.
+The file you need is <code>workshop.zip</code>.</p>
+</div>
+<div id="installing-necessary-software" class="section level2">
+<h2>Installing necessary software</h2>
+<div id="obtaining-the-software" class="section level3">
+<h3>Obtaining the software</h3>
+<p>All software for the workshop is free and easy to obtain. You will
+need three pieces of software:</p>
+<div id="r" class="section level4">
+<h4>R</h4>
+<p>R is the statistical software we will use for the workshop. You can
+obtain R from the website: <a href="http://cran.r-project.org/">Comprehensive R archive network</a>.
+Download the appropriate file for your operating system and install
+it.</p>
+</div>
+<div id="nimble" class="section level4">
+<h4>Nimble</h4>
+<p>Nimble (Just Another Gibbs Sampler) is the software that we will use
+for Bayesian analysis. We will call this software from R.</p>
+</div>
+<div id="rstudio" class="section level4">
+<h4>Rstudio</h4>
+<p>RStudio is a front-end that will make using R substantially easier.
+You can download it for your operating system from the <a href="http://www.rstudio.com/ide/download/desktop">RStudio
+website</a>.</p>
+</div>
+</div>
+<div id="installing-r-packages" class="section level3">
+<h3>Installing R packages</h3>
+<p>There are a few R packages that will be needed. Once you’ve installed
+the software above, open RStudio and paste the following code into the R
+console (by default, lower left corner) while connected to the
+Internet.</p>
+<pre class="r"><code>install.packages(c(&#39;nimble&#39;,&#39;mcmc&#39;,&#39;coda&#39;,&#39;MCMCpack&#39;,
+                  &#39;flexdashboard&#39;,&#39;pscl&#39;,&#39;multilevel&#39;),
+                 dependencies=TRUE)</code></pre>
+<p>After this command has completed, paste the following code into the
+console:</p>
+<pre class="r"><code>library(nimble)</code></pre>
+<p>If you load the library and see no errors, then <code>nimble</code>
+should be installed properly.</p>
+</div>
+</div>
+<div id="learning-about-r" class="section level2">
+<h2>Learning about R</h2>
+<p>The workshop assumes a basic knowledge of R. If you have never used R
+before, it will help to review the basics. Fortunately, there are many
+tutorials on the web that will help bring you up to speed. Here are a
+few of them:</p>
+<ul>
+<li><a href="http://www.cyclismo.org/tutorial/R/">R Tutorial by Kelly
+Black, Department of Mathematics and Computer Science, Clarkson
+University</a></li>
+<li><a href="http://tryr.codeschool.com/levels/1/challenges/1">Codeschool Try
+R</a></li>
+<li><a href="http://cran.r-project.org/doc/manuals/R-intro.html">CRAN
+Introduction to R</a> See especially parts 1, 2, 4, 6, and 12</li>
+</ul>
+</div>
+<div id="schedule" class="section level2">
+<h2>Schedule</h2>
+<p>All sessions will be held online via Teams.</p>
+<div id="day-1" class="section level3">
+<h3>Day 1</h3>
+<table>
+<colgroup>
+<col width="31%" />
+<col width="31%" />
+<col width="36%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th>Start</th>
+<th>End</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>9:15</td>
+<td>9:30</td>
+<td>Welcome (log in, ask initial technical/organisation questions)</td>
+</tr>
+<tr class="even">
+<td>9:30</td>
+<td>10:30</td>
+<td>Bayesian Basics</td>
+</tr>
+<tr class="odd">
+<td>10:30</td>
+<td>10:45</td>
+<td>Break</td>
+</tr>
+<tr class="even">
+<td>10:45</td>
+<td>11:45</td>
+<td>Bayesian parameter estimation 1</td>
+</tr>
+<tr class="odd">
+<td>11:45</td>
+<td>12:45</td>
+<td>Lunch</td>
+</tr>
+<tr class="even">
+<td>12:45</td>
+<td>13:45</td>
+<td>Markov Chain Monte Carlo</td>
+</tr>
+<tr class="odd">
+<td>13:45</td>
+<td>14:00</td>
+<td>Break</td>
+</tr>
+<tr class="even">
+<td>14:00</td>
+<td>15:00</td>
+<td>Interactive lecture: The BUGS language</td>
+</tr>
+<tr class="odd">
+<td>15:00</td>
+<td>15:15</td>
+<td>Break</td>
+</tr>
+<tr class="even">
+<td>15:15</td>
+<td>15:45</td>
+<td>Question and Answer</td>
+</tr>
+<tr class="odd">
+<td>15:45</td>
+<td>16:45</td>
+<td>Lab 1</td>
+</tr>
+</tbody>
+</table>
+</div>
+<div id="day-2" class="section level3">
+<h3>Day 2</h3>
+<table>
+<thead>
+<tr class="header">
+<th>Start</th>
+<th>End</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>9:30</td>
+<td>10:00</td>
+<td>Discussion of Lab 1</td>
+</tr>
+<tr class="even">
+<td>10:00</td>
+<td>11:00</td>
+<td>Hierarchical modeling</td>
+</tr>
+<tr class="odd">
+<td>11:00</td>
+<td>11:15</td>
+<td>Break</td>
+</tr>
+<tr class="even">
+<td>11:15</td>
+<td>12:15</td>
+<td>Analysis diagnostics</td>
+</tr>
+<tr class="odd">
+<td>12:15</td>
+<td>13:15</td>
+<td>Lunch</td>
+</tr>
+<tr class="even">
+<td>13:15</td>
+<td>13:45</td>
+<td>Question and Answer</td>
+</tr>
+<tr class="odd">
+<td>13:45</td>
+<td>15:00</td>
+<td>Lab 2</td>
+</tr>
+<tr class="even">
+<td>15:00</td>
+<td>15:15</td>
+<td>Break</td>
+</tr>
+<tr class="odd">
+<td>15:15</td>
+<td>15:45</td>
+<td>Discussion of Lab 2</td>
+</tr>
+</tbody>
+</table>
+</div>
 </div>
 
 

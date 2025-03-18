@@ -10,7 +10,7 @@ observed.means = aggregate(math ~ school, data = data1, mean)
 
 ## Compute the posterior means of the alpha parameters
 ## to use as point estimates
-alphas = samples[[1]][,1:160]
+alphas = samples[,1:160]
 alpha.est = colMeans(alphas)
 
 ```
